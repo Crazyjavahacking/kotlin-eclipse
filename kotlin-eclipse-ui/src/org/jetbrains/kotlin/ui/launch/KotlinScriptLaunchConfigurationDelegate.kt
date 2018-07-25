@@ -22,10 +22,13 @@ import org.eclipse.core.runtime.IProgressMonitor
 import org.eclipse.core.runtime.Path
 import org.eclipse.debug.core.ILaunch
 import org.eclipse.debug.core.ILaunchConfiguration
+import org.eclipse.jdt.core.IJavaProject
+import org.eclipse.jdt.core.JavaCore
 import org.eclipse.jdt.launching.AbstractJavaLaunchConfigurationDelegate
 import org.eclipse.jdt.launching.ExecutionArguments
 import org.eclipse.jdt.launching.VMRunnerConfiguration
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
+import org.jetbrains.kotlin.core.compiler.KotlinCompiler
 import org.jetbrains.kotlin.core.model.KOTLIN_COMPILER_PATH
 import org.jetbrains.kotlin.core.utils.ProjectUtils
 import java.io.File
@@ -37,33 +40,35 @@ class KotlinScriptLaunchConfigurationDelegate : AbstractJavaLaunchConfigurationD
     }
     
     override fun launch(configuration: ILaunchConfiguration, mode: String, launch: ILaunch, monitor: IProgressMonitor) {
-        monitor.beginTask("${configuration.name}...", 2)
+        monitor.beginTask("${configuration.name}...", 5)
         try {
             monitor.subTask("Verifying launch attributes...")
-            
-            val runConfig = verifyAndCreateRunnerConfiguration(configuration) ?: return
-            
-            if (monitor.isCanceled()) {
-                return;
-            }       
-            
+
+            val scriptFile = getScriptFile(configuration) ?: return
+            if (!scriptFile.exists()) return
+
+            monitor.subTask("Building project...")
+            val javaProject = JavaCore.create(scriptFile.project)
+            KotlinCompiler.INSTANCE.compileKotlinFiles(javaProject)
+
+            if (monitor.isCanceled) return
+            monitor.worked(3)
+
+            val runConfig = createRunnerConfiguration(configuration, scriptFile, javaProject)
+
+            if (monitor.isCanceled) return
             monitor.worked(1)
             
             val runner = getVMRunner(configuration, mode)
             runner.run(runConfig, launch, monitor)
-            
-            if (monitor.isCanceled()) {
-                return;
-            }   
+
+            if (monitor.isCanceled) return
         } finally {
             monitor.done()
         }
     }
-    
-    private fun verifyAndCreateRunnerConfiguration(configuration: ILaunchConfiguration): VMRunnerConfiguration? {
-        val scriptFile = getScriptFile(configuration) ?: return null
-        if (!scriptFile.exists()) return null
 
+    private fun createRunnerConfiguration(configuration: ILaunchConfiguration, scriptFile: IFile, javaProject: IJavaProject): VMRunnerConfiguration {
         val workingDir = verifyWorkingDirectory(configuration)?.absolutePath
 
         val programArgs = getProgramArguments(configuration)
@@ -75,16 +80,17 @@ class KotlinScriptLaunchConfigurationDelegate : AbstractJavaLaunchConfigurationD
         val vmAttributesMap: MutableMap<String, Any>? = getVMSpecificAttributesMap(configuration)
 
         return VMRunnerConfiguration(compilerMainClass, classpathForCompiler).apply {
-            setProgramArguments(buildCompilerArguments(
+            programArguments = buildCompilerArguments(
                     scriptFile,
-                    executionArgs.programArgumentsArray).toTypedArray())
+                    javaProject,
+                    executionArgs.programArgumentsArray).toTypedArray()
 
-            setEnvironment(environmentVars)
-            setVMArguments(executionArgs.vmArgumentsArray)
-            setWorkingDirectory(workingDir);
-            setVMSpecificAttributesMap(vmAttributesMap)
+            environment = environmentVars
+            vmArguments = executionArgs.vmArgumentsArray
+            workingDirectory = workingDir
+            vmSpecificAttributesMap = vmAttributesMap
 
-            setBootClassPath(getBootpath(configuration))
+            bootClassPath = getBootpath(configuration)
         }
     }
     
@@ -95,14 +101,23 @@ class KotlinScriptLaunchConfigurationDelegate : AbstractJavaLaunchConfigurationD
             ResourcesPlugin.getWorkspace().root.getFile(Path(scriptFilePath))
         }
     }
-    
-    private fun buildCompilerArguments(scriptFile: IFile, programArguments: Array<String>): List<String> {
+
+    private fun buildCompilerArguments(scriptFile: IFile, javaProject: IJavaProject, programArguments: Array<String>): List<String> {
         return arrayListOf<String>().apply {
             add("-kotlin-home")
             add(ProjectUtils.KT_HOME)
-            
+
+
+            val outputDirectories = ProjectUtils.getSrcOutDirectories(javaProject).map { it.second }
+            val classpathEntries = ProjectUtils.collectClasspathWithDependenciesForLaunch(javaProject) + outputDirectories
+
+            val pathSeparator = System.getProperty("path.separator")
+
+            add("-classpath")
+            add(classpathEntries.joinToString(separator = pathSeparator))
+
             add("-script")
-            add(scriptFile.getLocation().toOSString())
+            add(scriptFile.location.toOSString())
             
             addAll(programArguments)
         }
