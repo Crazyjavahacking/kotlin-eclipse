@@ -176,11 +176,6 @@ public object EclipseAnalyzerFacadeForJVM {
             environment: KotlinScriptEnvironment,
             scriptFile: KtFile): AnalysisResultWithProvider {
         
-        if (environment.isInitializingScriptDefinitions) {
-            // We can't start resolve when script definitions are not initialized
-            return AnalysisResultWithProvider.EMPTY
-        }
-        
         val trace = CliBindingTrace()
         
         val container = TopDownAnalyzerFacadeForJVM.createContainer(

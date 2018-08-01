@@ -141,11 +141,7 @@ abstract class KotlinCommonEnvironment(disposable: Disposable) {
         StorageComponentContainerContributor.registerExtensionPoint(project)
         
         with(project) {
-            val scriptDefinitionProvider = CliScriptDefinitionProvider()
-            registerService(ScriptDefinitionProvider::class.java, scriptDefinitionProvider)
-            registerService(
-                    ScriptDependenciesProvider::class.java,
-                    CliScriptDependenciesProvider(project, scriptDefinitionProvider))
+            registerService(ScriptDependenciesProvider::class.java, CliScriptDependenciesProvider::class.java)
             
             registerService(ModuleVisibilityManager::class.java, CliModuleVisibilityManagerImpl(true))
 
@@ -196,20 +192,6 @@ abstract class KotlinCommonEnvironment(disposable: Disposable) {
     }
     
     fun getRoots(): Set<JavaRoot> = roots
-    
-    private fun createJavaCoreApplicationEnvironment(disposable: Disposable): JavaCoreApplicationEnvironment {
-        Extensions.cleanRootArea(disposable)
-        registerAppExtensionPoints()
-
-        return JavaCoreApplicationEnvironment(disposable).apply {
-            registerFileType(PlainTextFileType.INSTANCE, "xml")
-            registerFileType(KotlinFileType.INSTANCE, "kt")
-            registerFileType(KotlinFileType.INSTANCE, KotlinParserDefinition.STD_SCRIPT_SUFFIX)
-            registerParserDefinition(KotlinParserDefinition())
-            
-            getApplication().registerService(KotlinBinaryClassCache::class.java, KotlinBinaryClassCache())
-        }
-    }
 
     fun getVirtualFile(location: IPath): VirtualFile? {
         return javaApplicationEnvironment.getLocalFileSystem().findFileByIoFile(location.toFile())
@@ -251,6 +233,20 @@ abstract class KotlinCommonEnvironment(disposable: Disposable) {
     }
 }
 
+private fun createJavaCoreApplicationEnvironment(disposable: Disposable): JavaCoreApplicationEnvironment {
+    Extensions.cleanRootArea(disposable)
+    registerAppExtensionPoints()
+
+    return JavaCoreApplicationEnvironment(disposable).apply {
+        registerFileType(PlainTextFileType.INSTANCE, "xml")
+        registerFileType(KotlinFileType.INSTANCE, "kt")
+        registerFileType(KotlinFileType.INSTANCE, KotlinParserDefinition.STD_SCRIPT_SUFFIX)
+        registerParserDefinition(KotlinParserDefinition())
+
+        application.registerService(KotlinBinaryClassCache::class.java, KotlinBinaryClassCache())
+        application.registerService(ScriptDefinitionProvider::class.java, EclipseScriptDefinitionProvider())
+    }
+}
 private fun registerProjectExtensionPoints(area: ExtensionsArea) {
     registerExtensionPoint(area, PsiTreeChangePreprocessor.EP_NAME, PsiTreeChangePreprocessor::class)
     registerExtensionPoint(area, PsiElementFinder.EP_NAME, PsiElementFinder::class)

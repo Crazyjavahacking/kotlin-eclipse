@@ -37,7 +37,7 @@ class ExecutableExtensionPointDescriptor<T>(val configurationElement: IConfigura
     fun createProvider(): T? {
         try {
             return configurationElement.createExecutableExtension(CLASS) as T?
-        } catch(e: CoreException) {
+        } catch (e: CoreException) {
             KotlinLogger.logError(e)
             return null
         }
