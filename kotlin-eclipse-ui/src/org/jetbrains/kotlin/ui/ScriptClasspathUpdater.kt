@@ -70,17 +70,10 @@ private fun tryUpdateScriptClasspath(file: IFile) {
 
 private data class StatusWithDependencies(val status: IStatus, val dependencies: ScriptDependencies?): IStatus by status
 
-private fun findEditor(scriptFile: IFile): KotlinScriptEditor? {
-    for (window in PlatformUI.getWorkbench().getWorkbenchWindows()) {
-        for (page in window.getPages()) {
-            for (editorReference in page.getEditorReferences()) {
-                val editor = editorReference.getEditor(false)
-                if (editor !is KotlinScriptEditor) continue
-                
-                if (editor.eclipseFile == scriptFile) return editor
-            }
-        }
-    }
-    
-    return null
-}
+private fun findEditor(scriptFile: IFile): KotlinScriptEditor? =
+    PlatformUI.getWorkbench().workbenchWindows.asSequence()
+            .flatMap { it.pages.asSequence() }
+            .flatMap { it.editorReferences.asSequence() }
+            .mapNotNull { it.getEditor(false) }
+            .filterIsInstance(KotlinScriptEditor::class.java)
+            .firstOrNull { it.eclipseFile == scriptFile }
