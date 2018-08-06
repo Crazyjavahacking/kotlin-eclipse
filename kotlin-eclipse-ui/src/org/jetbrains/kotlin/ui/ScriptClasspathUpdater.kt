@@ -40,10 +40,8 @@ class ScriptClasspathUpdater : IResourceChangeListener {
 private fun tryUpdateScriptClasspath(file: IFile) {
     if (findEditor(file) == null) return
     
-    val environment = getEnvironment(file)
-    if (environment !is KotlinScriptEnvironment) return
-    if (environment.loadScriptDefinitions || environment.isInitializingScriptDefinitions) return
-    
+    val environment = getEnvironment(file) as? KotlinScriptEnvironment ?: return
+
     val dependenciesProvider = ScriptDependenciesProvider.getInstance(environment.project)
     
     runJob("Check script dependencies", Job.DECORATE, null, {
@@ -58,7 +56,7 @@ private fun tryUpdateScriptClasspath(file: IFile) {
         if (file.isAccessible && editor != null) {
 //            KotlinLogger.logInfo("Set new dependencies!!")
         	editor.reconcile {
-        		KotlinScriptEnvironment.replaceEnvironment(file, environment.scriptDefinitions, environment.providersClasspath, newDependencies)
+        		KotlinScriptEnvironment.updateDependencies(file, newDependencies)
         		KotlinAnalysisFileCache.resetCache()
             }
         }

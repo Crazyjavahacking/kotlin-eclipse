@@ -39,39 +39,16 @@ class KotlinScriptEditor : KotlinCommonEditor() {
         }
 
     override val javaProject: IJavaProject? by lazy {
-        eclipseFile?.let { JavaCore.create(it.getProject()) }
+        eclipseFile?.let { JavaCore.create(it.project) }
     }
 
     override val document: IDocument
-        get() = getDocumentProvider().getDocument(getEditorInput())
-    
-    override fun createPartControl(parent: Composite) {
-        super.createPartControl(parent)
-        
-        val file = eclipseFile ?: return
-        val environment = getEnvironment(file) as KotlinScriptEnvironment
-
-        environment.initializeScriptDefinitions { scriptDefinitions, classpath ->
-            if (file.isAccessible && isOpen()) {
-                reconcile {
-                	KotlinScriptEnvironment.replaceEnvironment(file, scriptDefinitions, classpath, null)
-                }
-            }
-        }
-    }
+        get() = documentProvider.getDocument(editorInput)
     
     override val isScript: Boolean
         get() = true
     
     override fun dispose() {
-        val file = eclipseFile
-        if (file != null && file.exists()) {
-            val family = KotlinScriptEnvironment.constructFamilyForInitialization(file);
-            Job.getJobManager().cancel(family);
-        }
-        
-        super.dispose()
-        
         eclipseFile?.let {
             KotlinScriptEnvironment.removeKotlinEnvironment(it)
             KotlinPsiManager.removeFile(it)

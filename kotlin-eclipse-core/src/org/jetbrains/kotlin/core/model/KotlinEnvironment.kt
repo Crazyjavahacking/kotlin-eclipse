@@ -73,12 +73,12 @@ import org.jetbrains.kotlin.resolve.TargetPlatform
 import org.jetbrains.kotlin.resolve.jvm.platform.JvmPlatform
 import org.jetbrains.kotlin.script.KotlinScriptDefinition
 import org.jetbrains.kotlin.script.ScriptDefinitionProvider
-import org.jetbrains.kotlin.script.ScriptDependenciesProvider
 import org.jetbrains.kotlin.script.StandardScriptDefinition
 import java.io.File
 import java.net.URL
 import java.net.URLClassLoader
 import java.util.*
+import kotlin.script.experimental.dependencies.ScriptDependencies
 
 val KOTLIN_COMPILER_PATH = ProjectUtils.buildLibPath("kotlin-compiler")
 
@@ -165,6 +165,12 @@ class KotlinScriptEnvironment private constructor(
         }
 
         @JvmStatic
+        fun removeKotlinEnvironment(file: IFile) {
+            checkIsScript(file)
+            cachedEnvironment.removeEnvironment(file)
+        }
+
+        @JvmStatic
         fun getEclipseFile(project: Project): IFile? = cachedEnvironment.getEclipseResource(project)
 
         fun isScript(file: IFile): Boolean {
@@ -176,6 +182,14 @@ class KotlinScriptEnvironment private constructor(
                 throw IllegalArgumentException("KotlinScriptEnvironment can work only with scripts, not ${file.name}")
             }
         }
+
+        fun updateDependencies(file: IFile, newDependencies: ScriptDependencies?) {
+            cachedEnvironment.replaceEnvironment(file) {
+                KotlinScriptEnvironment(file, Disposer.newDisposable())
+                        .apply { addDependenciesToClasspath(newDependencies) }
+            }
+            KotlinPsiManager.removeFile(file)
+        }
     }
 
     private fun configureClasspath() {
@@ -183,14 +197,15 @@ class KotlinScriptEnvironment private constructor(
         addToClasspath(KOTLIN_SCRIPT_RUNTIME_PATH.toFile())
         addJREToClasspath()
 
-        ScriptDependenciesProvider.getInstance(project)
-                .getScriptDependencies(KotlinLightVirtualFile(eclipseFile, ""))
-                ?.classpath
-                ?.forEach { addToClasspath(it) }
-
         definition?.template?.java?.classLoader
                 ?.let { classpathFromClassloader(it) }
                 ?.forEach { addToClasspath(it) }
+    }
+
+    private fun addDependenciesToClasspath(dependencies: ScriptDependencies?) {
+        dependencies?.classpath?.forEach {
+            addToClasspath(it)
+        }
     }
 
     private fun addJREToClasspath() {
@@ -292,10 +307,8 @@ class KotlinEnvironment private constructor(val eclipseProject: IProject, dispos
             registerService(KtLightClassForFacade.FacadeStubCache::class.java, KtLightClassForFacade.FacadeStubCache(project))
         }
 
-        val scriptDefinitionProvider = ScriptDefinitionProvider.getInstance(project) as? CliScriptDefinitionProvider
-        if (scriptDefinitionProvider != null) {
-            scriptDefinitionProvider.setScriptDefinitions(listOf(StandardScriptDefinition))
-        }
+        (ScriptDefinitionProvider.getInstance(project) as? CliScriptDefinitionProvider)
+                ?.setScriptDefinitions(listOf(StandardScriptDefinition))
 
         registerCompilerPlugins()
 
