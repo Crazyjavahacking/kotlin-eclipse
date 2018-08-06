@@ -1,7 +1,6 @@
 package org.jetbrains.kotlin.core.launch
 
 import java.io.PrintStream
-import org.jetbrains.annotations.NotNull
 import org.jetbrains.kotlin.cli.common.CLICompiler
 import org.jetbrains.kotlin.cli.common.ExitCode
 import org.jetbrains.kotlin.cli.jvm.compiler.CompileEnvironmentException
@@ -12,15 +11,14 @@ import org.jetbrains.kotlin.core.model.KOTLIN_COMPILER_PATH
 object KotlinCLICompiler {
 	private val obligatoryCompilerFlags
         get() = arrayOf(
-            "-Xintellij-plugin-root=" + KOTLIN_COMPILER_PATH,
+            "-Xintellij-plugin-root=$KOTLIN_COMPILER_PATH",
 		    "-Xdisable-default-scripting-plugin"
 		)
 	
 	@JvmStatic
 	fun doMain(compiler: CLICompiler<*>, errorStream: PrintStream, args: Array<String>): ExitCode {
 		System.setProperty("java.awt.headless", "true")
-		val exitCode = doMainNoExitWithHtmlOutput(compiler, errorStream, args)
-		return exitCode
+        return doMainNoExitWithHtmlOutput(compiler, errorStream, args)
 	}
 
 	private fun doMainNoExitWithHtmlOutput(
