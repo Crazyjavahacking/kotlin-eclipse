@@ -30,6 +30,7 @@ import org.eclipse.jdt.launching.VMRunnerConfiguration
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
 import org.jetbrains.kotlin.core.compiler.KotlinCompiler
 import org.jetbrains.kotlin.core.model.KOTLIN_COMPILER_PATH
+import org.jetbrains.kotlin.core.model.KotlinScriptEnvironment
 import org.jetbrains.kotlin.core.utils.ProjectUtils
 import java.io.File
 
@@ -38,7 +39,7 @@ class KotlinScriptLaunchConfigurationDelegate : AbstractJavaLaunchConfigurationD
         private val compilerMainClass = K2JVMCompiler::class.java.name
         private val classpathForCompiler = arrayOf(File(KOTLIN_COMPILER_PATH).absolutePath)
     }
-    
+
     override fun launch(configuration: ILaunchConfiguration, mode: String, launch: ILaunch, monitor: IProgressMonitor) {
         monitor.beginTask("${configuration.name}...", 5)
         try {
@@ -58,7 +59,7 @@ class KotlinScriptLaunchConfigurationDelegate : AbstractJavaLaunchConfigurationD
 
             if (monitor.isCanceled) return
             monitor.worked(1)
-            
+
             val runner = getVMRunner(configuration, mode)
             runner.run(runConfig, launch, monitor)
 
@@ -93,9 +94,7 @@ class KotlinScriptLaunchConfigurationDelegate : AbstractJavaLaunchConfigurationD
             bootClassPath = getBootpath(configuration)
         }
     }
-    
-    
-    
+
     private fun getScriptFile(configuration: ILaunchConfiguration): IFile? {
         return configuration.getAttribute(SCRIPT_FILE_PATH, null as String?)?.let { scriptFilePath ->
             ResourcesPlugin.getWorkspace().root.getFile(Path(scriptFilePath))
@@ -104,21 +103,27 @@ class KotlinScriptLaunchConfigurationDelegate : AbstractJavaLaunchConfigurationD
 
     private fun buildCompilerArguments(scriptFile: IFile, javaProject: IJavaProject, programArguments: Array<String>): List<String> {
         return arrayListOf<String>().apply {
-            add("-kotlin-home")
-            add(ProjectUtils.KT_HOME)
-
+            val environment = KotlinScriptEnvironment.getEnvironment(scriptFile)
 
             val outputDirectories = ProjectUtils.getSrcOutDirectories(javaProject).map { it.second }
             val classpathEntries = ProjectUtils.collectClasspathWithDependenciesForLaunch(javaProject) + outputDirectories
 
             val pathSeparator = System.getProperty("path.separator")
 
+            add("-kotlin-home")
+            add(ProjectUtils.KT_HOME)
+
             add("-classpath")
             add(classpathEntries.joinToString(separator = pathSeparator))
 
             add("-script")
             add(scriptFile.location.toOSString())
-            
+
+            environment.definition?.template?.qualifiedName?.let {
+                add("-script-templates")
+                add(it)
+            }
+
             addAll(programArguments)
         }
     }

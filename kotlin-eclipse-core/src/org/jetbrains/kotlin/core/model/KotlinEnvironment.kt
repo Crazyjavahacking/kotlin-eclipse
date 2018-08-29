@@ -114,11 +114,13 @@ class KotlinScriptEnvironment private constructor(
         disposable: Disposable
 ) : KotlinCommonEnvironment(disposable) {
 
-    private val definition: KotlinScriptDefinition? = ScriptDefinitionProvider.getInstance(project)
+    val definition: KotlinScriptDefinition? = ScriptDefinitionProvider.getInstance(project)
             .findScriptDefinition(eclipseFile.name)
 
     init {
         configureClasspath()
+
+        configuration.put(JVMConfigurationKeys.SCRIPT_DEFINITIONS, listOf(definition))
 
         definition?.annotationsForSamWithReceivers
                 ?.let { CliSamWithReceiverComponentContributor(it) }
