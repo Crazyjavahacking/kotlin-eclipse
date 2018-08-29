@@ -105,8 +105,7 @@ class KotlinScriptLaunchConfigurationDelegate : AbstractJavaLaunchConfigurationD
         return arrayListOf<String>().apply {
             val environment = KotlinScriptEnvironment.getEnvironment(scriptFile)
 
-            val outputDirectories = ProjectUtils.getSrcOutDirectories(javaProject).map { it.second }
-            val classpathEntries = ProjectUtils.collectClasspathWithDependenciesForLaunch(javaProject) + outputDirectories
+            val classpathEntries = environment.dependencies?.classpath.orEmpty()
 
             val pathSeparator = System.getProperty("path.separator")
 

@@ -171,35 +171,6 @@ object EclipseAnalyzerFacadeForJVM {
                 container)
     }
 
-//    public fun analyzeScript(
-//            environment: KotlinScriptEnvironment,
-//            scriptFile: KtFile): AnalysisResultWithProvider {
-//
-//        val trace = CliBindingTrace()
-//
-//        val container = TopDownAnalyzerFacadeForJVM.createContainer(
-//                environment.project,
-//                setOf(scriptFile),
-//                trace,
-//                environment.configuration,
-//                { KotlinPackagePartProvider(environment) },
-//                { storageManager: StorageManager, files: Collection<KtFile> -> FileBasedDeclarationProviderFactory(storageManager, files) }
-//        )
-//
-//        try {
-//            container.get<LazyTopDownAnalyzer>().analyzeDeclarations(TopDownAnalysisMode.TopLevelDeclarations, setOf(scriptFile))
-//        } catch(e: KotlinFrontEndException) {
-////          Editor will break if we do not catch this exception
-////          and will not be able to save content without reopening it.
-////          In IDEA this exception throws only in CLI
-//            KotlinLogger.logError(e)
-//        }
-//
-//        return AnalysisResultWithProvider(
-//                AnalysisResult.success(trace.getBindingContext(), container.get<ModuleDescriptor>()),
-//                container)
-//    }
-
     fun analyzeScript(
             environment: KotlinScriptEnvironment,
             scriptFile: KtFile

@@ -1,11 +1,13 @@
 package org.jetbrains.kotlin.core.model
 
+import org.eclipse.jdt.core.IJavaProject
 import org.jetbrains.kotlin.core.builder.KotlinPsiManager
 import org.jetbrains.kotlin.core.utils.ProjectUtils
 import org.jetbrains.kotlin.core.utils.asResource
 import org.jetbrains.kotlin.core.utils.isInClasspath
 import org.jetbrains.kotlin.core.utils.javaProject
 import org.jetbrains.kotlin.script.KotlinScriptDefinition
+import java.io.File
 import kotlin.script.dependencies.Environment
 import kotlin.script.dependencies.ScriptContents
 import kotlin.script.experimental.dependencies.DependenciesResolver
@@ -29,7 +31,7 @@ private class IdeScriptDefinition: KotlinScriptDefinition(ScriptTemplateWithArgs
 
                 return if (scriptResource != null && scriptResource.isInClasspath && javaProject != null) {
                     ScriptDependencies(
-                            classpath = scriptResource.javaProject?.let { ProjectUtils.collectClasspathWithDependenciesForBuild(it) }.orEmpty(),
+                            classpath = createClasspathForScript(javaProject),
                             sources = KotlinPsiManager.getFilesByProject(javaProject.project).map { it.location.toFile() }
                     ).asSuccess()
                 } else {
@@ -37,4 +39,9 @@ private class IdeScriptDefinition: KotlinScriptDefinition(ScriptTemplateWithArgs
                 }
             }
         }
+}
+
+private fun createClasspathForScript(javaProject: IJavaProject): List<File> {
+    val outputDirectories = ProjectUtils.getSrcOutDirectories(javaProject).map { it.second }
+    return ProjectUtils.collectClasspathWithDependenciesForLaunch(javaProject) + outputDirectories
 }
