@@ -20,18 +20,23 @@ import com.intellij.openapi.project.Project
 import com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.kotlin.analyzer.AnalysisResult
 import org.jetbrains.kotlin.builtins.JvmBuiltInsPackageFragmentProvider
+import org.jetbrains.kotlin.cli.jvm.compiler.CliBindingTrace
+import org.jetbrains.kotlin.cli.jvm.compiler.TopDownAnalyzerFacadeForJVM
+import org.jetbrains.kotlin.cli.jvm.compiler.TopDownAnalyzerFacadeForJVM.SourceOrBinaryModuleClassResolver
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
+import org.jetbrains.kotlin.config.JvmTarget
 import org.jetbrains.kotlin.config.LanguageVersionSettingsImpl
 import org.jetbrains.kotlin.container.ComponentProvider
 import org.jetbrains.kotlin.context.ContextForNewModule
 import org.jetbrains.kotlin.context.MutableModuleContext
 import org.jetbrains.kotlin.context.ProjectContext
+import org.jetbrains.kotlin.core.builder.KotlinPsiManager
 import org.jetbrains.kotlin.core.log.KotlinLogger
 import org.jetbrains.kotlin.core.model.KotlinEnvironment
 import org.jetbrains.kotlin.core.model.KotlinScriptEnvironment
 import org.jetbrains.kotlin.core.utils.ProjectUtils
-import org.jetbrains.kotlin.descriptors.ModuleDescriptor
+import org.jetbrains.kotlin.core.utils.asResource
 import org.jetbrains.kotlin.descriptors.PackageFragmentProvider
 import org.jetbrains.kotlin.descriptors.impl.CompositePackageFragmentProvider
 import org.jetbrains.kotlin.frontend.java.di.initJvmBuiltInsForTopDownAnalysis
@@ -47,14 +52,8 @@ import org.jetbrains.kotlin.resolve.lazy.KotlinCodeAnalyzer
 import org.jetbrains.kotlin.resolve.lazy.declarations.DeclarationProviderFactory
 import org.jetbrains.kotlin.resolve.lazy.declarations.FileBasedDeclarationProviderFactory
 import org.jetbrains.kotlin.util.KotlinFrontEndException
-import java.util.ArrayList
-import java.util.LinkedHashSet
+import java.util.*
 import org.jetbrains.kotlin.frontend.java.di.createContainerForTopDownAnalyzerForJvm as createContainerForScript
-import org.jetbrains.kotlin.storage.StorageManager
-import org.jetbrains.kotlin.cli.jvm.compiler.TopDownAnalyzerFacadeForJVM
-import org.jetbrains.kotlin.cli.jvm.compiler.TopDownAnalyzerFacadeForJVM.SourceOrBinaryModuleClassResolver
-import org.jetbrains.kotlin.config.JvmTarget
-import org.jetbrains.kotlin.cli.jvm.compiler.CliBindingTrace
 
 data class AnalysisResultWithProvider(val analysisResult: AnalysisResult, val componentProvider: ComponentProvider?) {
     companion object {
@@ -62,8 +61,8 @@ data class AnalysisResultWithProvider(val analysisResult: AnalysisResult, val co
     }
 }
 
-public object EclipseAnalyzerFacadeForJVM {
-    public fun analyzeFilesWithJavaIntegration(
+object EclipseAnalyzerFacadeForJVM {
+    fun analyzeFilesWithJavaIntegration(
             environment: KotlinEnvironment,
             filesToAnalyze: Collection<KtFile>): AnalysisResultWithProvider {
         val filesSet = filesToAnalyze.toSet()
@@ -168,40 +167,146 @@ public object EclipseAnalyzerFacadeForJVM {
         }
         
         return AnalysisResultWithProvider(
-                AnalysisResult.success(trace.getBindingContext(), module),
+                AnalysisResult.success(trace.bindingContext, module),
                 container)
     }
-    
-    public fun analyzeScript(
+
+//    public fun analyzeScript(
+//            environment: KotlinScriptEnvironment,
+//            scriptFile: KtFile): AnalysisResultWithProvider {
+//
+//        val trace = CliBindingTrace()
+//
+//        val container = TopDownAnalyzerFacadeForJVM.createContainer(
+//                environment.project,
+//                setOf(scriptFile),
+//                trace,
+//                environment.configuration,
+//                { KotlinPackagePartProvider(environment) },
+//                { storageManager: StorageManager, files: Collection<KtFile> -> FileBasedDeclarationProviderFactory(storageManager, files) }
+//        )
+//
+//        try {
+//            container.get<LazyTopDownAnalyzer>().analyzeDeclarations(TopDownAnalysisMode.TopLevelDeclarations, setOf(scriptFile))
+//        } catch(e: KotlinFrontEndException) {
+////          Editor will break if we do not catch this exception
+////          and will not be able to save content without reopening it.
+////          In IDEA this exception throws only in CLI
+//            KotlinLogger.logError(e)
+//        }
+//
+//        return AnalysisResultWithProvider(
+//                AnalysisResult.success(trace.getBindingContext(), container.get<ModuleDescriptor>()),
+//                container)
+//    }
+
+    fun analyzeScript(
             environment: KotlinScriptEnvironment,
-            scriptFile: KtFile): AnalysisResultWithProvider {
-        
+            scriptFile: KtFile
+    ): AnalysisResultWithProvider {
+        val allFiles = LinkedHashSet<KtFile>().apply {
+            add(scriptFile)
+            environment.dependencies?.sources
+                    .orEmpty()
+                    .mapNotNull { it.asResource }
+                    .mapNotNull { KotlinPsiManager.getKotlinParsedFile(it) }
+                    .toCollection(this)
+        }
+
+        val project = environment.project
+
+        val moduleContext = createModuleContext(project, environment.configuration, true)
+        val storageManager = moduleContext.storageManager
+        val module = moduleContext.module
+
+        val providerFactory = FileBasedDeclarationProviderFactory(moduleContext.storageManager, allFiles)
         val trace = CliBindingTrace()
-        
-        val container = TopDownAnalyzerFacadeForJVM.createContainer(
-                environment.project,
-                setOf(scriptFile),
+
+        val sourceScope = TopDownAnalyzerFacadeForJVM.newModuleSearchScope(project, listOf(scriptFile))
+        val moduleClassResolver = SourceOrBinaryModuleClassResolver(sourceScope)
+
+        val languageVersionSettings = LanguageVersionSettingsImpl(
+                LanguageVersionSettingsImpl.DEFAULT.languageVersion,
+                LanguageVersionSettingsImpl.DEFAULT.apiVersion)
+
+        val optionalBuiltInsModule = JvmBuiltIns(storageManager).apply { initialize(module, true) }.builtInsModule
+
+        val dependencyModule = run {
+            val dependenciesContext = ContextForNewModule(
+                    moduleContext, Name.special("<dependencies of ${environment.configuration.getNotNull(CommonConfigurationKeys.MODULE_NAME)}>"),
+                    module.builtIns, null
+            )
+
+            val dependencyScope = GlobalSearchScope.notScope(sourceScope)
+            val dependenciesContainer = createContainerForTopDownAnalyzerForJvm(
+                    dependenciesContext,
+                    trace,
+                    DeclarationProviderFactory.EMPTY,
+                    dependencyScope,
+                    LookupTracker.DO_NOTHING,
+                    KotlinPackagePartProvider(environment),
+                    JvmTarget.DEFAULT,
+                    languageVersionSettings,
+                    moduleClassResolver,
+                    KotlinPsiManager.getJavaProject(scriptFile)!!)
+
+            moduleClassResolver.compiledCodeResolver = dependenciesContainer.get<JavaDescriptorResolver>()
+
+            dependenciesContext.setDependencies(listOfNotNull(dependenciesContext.module, optionalBuiltInsModule))
+            dependenciesContext.initializeModuleContents(CompositePackageFragmentProvider(listOf(
+                    moduleClassResolver.compiledCodeResolver.packageFragmentProvider,
+                    dependenciesContainer.get<JvmBuiltInsPackageFragmentProvider>()
+            )))
+            dependenciesContext.module
+        }
+
+        val container = createContainerForTopDownAnalyzerForJvm(
+                moduleContext,
                 trace,
-                environment.configuration,
-                { KotlinPackagePartProvider(environment) },
-                { storageManager: StorageManager, files: Collection<KtFile> -> FileBasedDeclarationProviderFactory(storageManager, files) }
+                providerFactory,
+                sourceScope,
+                LookupTracker.DO_NOTHING,
+                KotlinPackagePartProvider(environment),
+                JvmTarget.DEFAULT,
+                languageVersionSettings,
+                moduleClassResolver,
+                KotlinPsiManager.getJavaProject(scriptFile)!!).apply {
+            initJvmBuiltInsForTopDownAnalysis()
+        }
+
+        moduleClassResolver.sourceCodeResolver = container.get<JavaDescriptorResolver>()
+
+        val additionalProviders = ArrayList<PackageFragmentProvider>()
+        additionalProviders.add(container.get<JavaDescriptorResolver>().packageFragmentProvider)
+
+        PackageFragmentProviderExtension.getInstances(project).mapNotNullTo(additionalProviders) { extension ->
+            extension.getPackageFragmentProvider(project, module, storageManager, trace, null, LookupTracker.DO_NOTHING)
+        }
+
+        module.setDependencies(
+                listOfNotNull(module, dependencyModule, optionalBuiltInsModule),
+                setOf(dependencyModule)
         )
-        
+        module.initialize(CompositePackageFragmentProvider(
+                listOf(container.get<KotlinCodeAnalyzer>().packageFragmentProvider) +
+                        additionalProviders
+        ))
+
         try {
-            container.get<LazyTopDownAnalyzer>().analyzeDeclarations(TopDownAnalysisMode.TopLevelDeclarations, setOf(scriptFile))
+            container.get<LazyTopDownAnalyzer>().analyzeDeclarations(TopDownAnalysisMode.TopLevelDeclarations, listOf(scriptFile))
         } catch(e: KotlinFrontEndException) {
 //          Editor will break if we do not catch this exception
 //          and will not be able to save content without reopening it.
 //          In IDEA this exception throws only in CLI
             KotlinLogger.logError(e)
         }
-        
+
         return AnalysisResultWithProvider(
-                AnalysisResult.success(trace.getBindingContext(), container.get<ModuleDescriptor>()),
+                AnalysisResult.success(trace.bindingContext, module),
                 container)
     }
-    
-    private fun getPath(jetFile: KtFile): String? = jetFile.getVirtualFile()?.getPath()
+
+    private fun getPath(jetFile: KtFile): String? = jetFile.virtualFile?.path
     
     private fun createModuleContext(
             project: Project,

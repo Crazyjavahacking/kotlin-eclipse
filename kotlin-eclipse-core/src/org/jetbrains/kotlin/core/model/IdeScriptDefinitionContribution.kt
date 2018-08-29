@@ -1,9 +1,10 @@
 package org.jetbrains.kotlin.core.model
 
-import org.eclipse.core.internal.resources.Workspace
-import org.eclipse.core.resources.IWorkspaceRoot
-import org.eclipse.core.resources.ResourcesPlugin
-import org.jetbrains.kotlin.core.log.KotlinLogger
+import org.jetbrains.kotlin.core.builder.KotlinPsiManager
+import org.jetbrains.kotlin.core.utils.ProjectUtils
+import org.jetbrains.kotlin.core.utils.asResource
+import org.jetbrains.kotlin.core.utils.isInClasspath
+import org.jetbrains.kotlin.core.utils.javaProject
 import org.jetbrains.kotlin.script.KotlinScriptDefinition
 import kotlin.script.dependencies.Environment
 import kotlin.script.dependencies.ScriptContents
@@ -23,10 +24,17 @@ private class IdeScriptDefinition: KotlinScriptDefinition(ScriptTemplateWithArgs
     override val dependencyResolver: DependenciesResolver
         get() = object: DependenciesResolver {
             override fun resolve(scriptContents: ScriptContents, environment: Environment): DependenciesResolver.ResolveResult {
-                val p = ResourcesPlugin.getWorkspace().root.findFilesForLocationURI(scriptContents.file?.toURI())
-                KotlinLogger.logInfo("$p")
-                return ScriptDependencies.Empty.asSuccess()
-            }
+                val scriptResource = scriptContents.file?.asResource
+                val javaProject = scriptResource?.javaProject
 
+                return if (scriptResource != null && scriptResource.isInClasspath && javaProject != null) {
+                    ScriptDependencies(
+                            classpath = scriptResource.javaProject?.let { ProjectUtils.collectClasspathWithDependenciesForBuild(it) }.orEmpty(),
+                            sources = KotlinPsiManager.getFilesByProject(javaProject.project).map { it.location.toFile() }
+                    ).asSuccess()
+                } else {
+                    ScriptDependencies.Empty.asSuccess()
+                }
+            }
         }
 }

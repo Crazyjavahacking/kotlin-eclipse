@@ -110,6 +110,7 @@ fun getEclipseResource(ideaProject: Project): IResource? {
 
 class KotlinScriptEnvironment private constructor(
         private val eclipseFile: IFile,
+        val dependencies: ScriptDependencies?,
         disposable: Disposable
 ) : KotlinCommonEnvironment(disposable) {
 
@@ -135,7 +136,7 @@ class KotlinScriptEnvironment private constructor(
         }
 
         val singleJavaFileRoots =
-                getRoots().filter { !it.file.isDirectory() && it.file.extension == "java"  }
+                getRoots().filter { !it.file.isDirectory && it.file.extension == "java" }
 
         val fileManager = ServiceManager.getService(project, CoreJavaFileManager::class.java)
         (fileManager as KotlinCliJavaFileManagerImpl).initialize(
@@ -160,7 +161,7 @@ class KotlinScriptEnvironment private constructor(
             checkIsScript(file)
 
             return cachedEnvironment.getOrCreateEnvironment(file) {
-                KotlinScriptEnvironment(it, Disposer.newDisposable())
+                KotlinScriptEnvironment(it, null, Disposer.newDisposable())
             }
         }
 
@@ -185,7 +186,7 @@ class KotlinScriptEnvironment private constructor(
 
         fun updateDependencies(file: IFile, newDependencies: ScriptDependencies?) {
             cachedEnvironment.replaceEnvironment(file) {
-                KotlinScriptEnvironment(file, Disposer.newDisposable())
+                KotlinScriptEnvironment(file, newDependencies, Disposer.newDisposable())
                         .apply { addDependenciesToClasspath(newDependencies) }
             }
             KotlinPsiManager.removeFile(file)
@@ -214,7 +215,7 @@ class KotlinScriptEnvironment private constructor(
             val javaProject = JavaCore.create(project)
             javaProject.rawClasspath.mapNotNull { entry ->
                 if (entry.entryKind == IClasspathEntry.CPE_CONTAINER) {
-                    val container = JavaCore.getClasspathContainer(entry.getPath(), javaProject)
+                    val container = JavaCore.getClasspathContainer(entry.path, javaProject)
                     if (container != null && container.kind == IClasspathContainer.K_DEFAULT_SYSTEM) {
                         return@mapNotNull container
                     }
