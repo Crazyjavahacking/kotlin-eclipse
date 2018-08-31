@@ -16,19 +16,16 @@
  *******************************************************************************/
 package org.jetbrains.kotlin.ui.editors
 
-import org.eclipse.core.runtime.jobs.Job
 import org.eclipse.jdt.core.IJavaProject
 import org.eclipse.jdt.core.JavaCore
 import org.eclipse.jface.text.IDocument
-import org.eclipse.swt.widgets.Composite
 import org.eclipse.ui.PlatformUI
 import org.jetbrains.kotlin.core.builder.KotlinPsiManager
 import org.jetbrains.kotlin.core.model.KotlinScriptEnvironment
 import org.jetbrains.kotlin.core.model.getEnvironment
 import org.jetbrains.kotlin.psi.KtFile
-import org.jetbrains.kotlin.script.KotlinScriptExternalDependencies
-import org.jetbrains.kotlin.ui.editors.annotations.KotlinLineAnnotationsReconciler
 import org.jetbrains.kotlin.script.ScriptDependenciesProvider
+import org.jetbrains.kotlin.ui.tryUpdateScriptClasspath
 import kotlin.script.experimental.dependencies.ScriptDependencies
 
 class KotlinScriptEditor : KotlinCommonEditor() {
@@ -44,42 +41,46 @@ class KotlinScriptEditor : KotlinCommonEditor() {
 
     override val document: IDocument
         get() = documentProvider.getDocument(editorInput)
-    
+
     override val isScript: Boolean
         get() = true
-    
+
     override fun dispose() {
         eclipseFile?.let {
             KotlinScriptEnvironment.removeKotlinEnvironment(it)
             KotlinPsiManager.removeFile(it)
         }
     }
-    
+
     internal fun reconcile(runBeforeReconciliation: () -> Unit = {}) {
         kotlinReconcilingStrategy.reconcile(runBeforeReconciliation)
+    }
+
+    override fun doAfterSemanticHighlightingInstallation() {
+        eclipseFile?.let { tryUpdateScriptClasspath(it) }
     }
 }
 
 fun getScriptDependencies(editor: KotlinScriptEditor): ScriptDependencies? {
     val eclipseFile = editor.eclipseFile ?: return null
-    
+
     val project = getEnvironment(eclipseFile).project
     val definition = ScriptDependenciesProvider.getInstance(project)
-    
+
     val ktFile = editor.parsedFile ?: return null
     return definition.getScriptDependencies(ktFile)
 }
 
 fun KotlinCommonEditor.isOpen(): Boolean {
-    for (window in PlatformUI.getWorkbench().getWorkbenchWindows()) {
-        for (page in window.getPages()) {
-            for (editorReference in page.getEditorReferences()) {
+    for (window in PlatformUI.getWorkbench().workbenchWindows) {
+        for (page in window.pages) {
+            for (editorReference in page.editorReferences) {
                 if (editorReference.getEditor(false) == this) {
                     return true
                 }
             }
         }
     }
-    
+
     return false
 }

@@ -6,11 +6,13 @@ import org.jetbrains.kotlin.script.ScriptDefinitionProvider
 private const val EXTENSION_POINT_ID = "org.jetbrains.kotlin.core.scriptDefinitionContribution"
 
 class EclipseScriptDefinitionProvider: ScriptDefinitionProvider {
-    private val scriptDefinitions: List<KotlinScriptDefinition> by lazy {
-        loadExecutableEP<ScriptDefinitionContribution>(EXTENSION_POINT_ID)
-                .mapNotNull { it.createProvider() }
-                .sortedByDescending { it.priority }
-                .map { it.definition }
+    private companion object {
+        val scriptDefinitions: List<KotlinScriptDefinition> by lazy {
+            loadExecutableEP<ScriptDefinitionContribution>(EXTENSION_POINT_ID)
+                    .mapNotNull { it.createProvider() }
+                    .sortedByDescending { it.priority }
+                    .map { it.definition }
+        }
     }
 
     override fun findScriptDefinition(fileName: String) =

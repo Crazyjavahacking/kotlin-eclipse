@@ -56,15 +56,8 @@ import org.jetbrains.kotlin.asJava.LightClassGenerationSupport
 import org.jetbrains.kotlin.asJava.finder.JavaElementFinder
 import org.jetbrains.kotlin.caches.resolve.KotlinCacheService
 import org.jetbrains.kotlin.cli.common.CliModuleVisibilityManagerImpl
-import org.jetbrains.kotlin.cli.common.script.CliScriptDefinitionProvider
 import org.jetbrains.kotlin.cli.common.script.CliScriptDependenciesProvider
-import org.jetbrains.kotlin.cli.jvm.compiler.CliKotlinAsJavaSupport
-import org.jetbrains.kotlin.cli.jvm.compiler.CliLightClassGenerationSupport
-import org.jetbrains.kotlin.cli.jvm.compiler.CliModuleAnnotationsResolver
-import org.jetbrains.kotlin.cli.jvm.compiler.CliTraceHolder
-import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCliJavaFileManagerImpl
-import org.jetbrains.kotlin.cli.jvm.compiler.MockExternalAnnotationsManager
-import org.jetbrains.kotlin.cli.jvm.compiler.MockInferredAnnotationsManager
+import org.jetbrains.kotlin.cli.jvm.compiler.*
 import org.jetbrains.kotlin.cli.jvm.index.JavaRoot
 import org.jetbrains.kotlin.cli.jvm.index.JvmDependenciesDynamicCompoundIndex
 import org.jetbrains.kotlin.cli.jvm.index.SingleJavaFileRootsIndex
@@ -96,17 +89,17 @@ import org.jetbrains.kotlin.script.ScriptDependenciesProvider
 import org.jetbrains.kotlin.script.ScriptHelper
 import org.jetbrains.kotlin.script.ScriptHelperImpl
 import java.io.File
-import java.util.LinkedHashSet
+import java.util.*
 import kotlin.reflect.KClass
 
 private fun setIdeaIoUseFallback() {
     if (SystemInfo.isWindows) {
         val properties = System.getProperties()
 
-        properties.setProperty("idea.io.use.nio2", java.lang.Boolean.TRUE.toString());
+        properties.setProperty("idea.io.use.nio2", java.lang.Boolean.TRUE.toString())
 
         if (!(SystemInfo.isJavaVersionAtLeast("1.7") && !"1.7.0-ea".equals(SystemInfo.JAVA_VERSION))) {
-            properties.setProperty("idea.io.use.fallback", java.lang.Boolean.TRUE.toString());
+            properties.setProperty("idea.io.use.fallback", java.lang.Boolean.TRUE.toString())
         }
     }
 }
@@ -129,8 +122,8 @@ abstract class KotlinCommonEnvironment(disposable: Disposable) {
         
         projectEnvironment = object : JavaCoreProjectEnvironment(disposable, javaApplicationEnvironment) {
             override fun preregisterServices() {
-                registerProjectExtensionPoints(Extensions.getArea(getProject()))
-                CoreApplicationEnvironment.registerExtensionPoint(Extensions.getArea(getProject()), JvmElementProvider.EP_NAME, JvmElementProvider::class.java)
+                registerProjectExtensionPoints(Extensions.getArea(project))
+                CoreApplicationEnvironment.registerExtensionPoint(Extensions.getArea(project), JvmElementProvider.EP_NAME, JvmElementProvider::class.java)
             }
             
             override fun createCoreFileManager() = KotlinCliJavaFileManagerImpl(PsiManager.getInstance(project))
@@ -142,7 +135,7 @@ abstract class KotlinCommonEnvironment(disposable: Disposable) {
         
         with(project) {
             registerService(ScriptDependenciesProvider::class.java, CliScriptDependenciesProvider::class.java)
-            
+
             registerService(ModuleVisibilityManager::class.java, CliModuleVisibilityManagerImpl(true))
 
             // For j2k converter
@@ -182,8 +175,8 @@ abstract class KotlinCommonEnvironment(disposable: Disposable) {
 			area.getExtensionPoint(PsiElementFinder.EP_NAME).registerExtension(JavaElementFinder(this, kotlinAsJavaSupport))
             registerService(KotlinJavaPsiFacade::class.java, KotlinJavaPsiFacade(this))
         }
-        
-        configuration.put(CommonConfigurationKeys.MODULE_NAME, project.getName())
+
+        configuration.put(CommonConfigurationKeys.MODULE_NAME, project.name)
 
         ExpressionCodegenExtension.Companion.registerExtensionPoint(project)
         registerApplicationExtensionPointsAndExtensionsFrom()
@@ -194,21 +187,21 @@ abstract class KotlinCommonEnvironment(disposable: Disposable) {
     fun getRoots(): Set<JavaRoot> = roots
 
     fun getVirtualFile(location: IPath): VirtualFile? {
-        return javaApplicationEnvironment.getLocalFileSystem().findFileByIoFile(location.toFile())
+        return javaApplicationEnvironment.localFileSystem.findFileByIoFile(location.toFile())
     }
 
     fun getVirtualFileInJar(pathToJar: IPath, relativePath: String): VirtualFile? {
-        return javaApplicationEnvironment.getJarFileSystem().findFileByPath("$pathToJar!/$relativePath")
+        return javaApplicationEnvironment.jarFileSystem.findFileByPath("$pathToJar!/$relativePath")
     }
 
     fun isJarFile(pathToJar: IPath): Boolean {
-        val jarFile = javaApplicationEnvironment.getJarFileSystem().findFileByPath("$pathToJar!/")
-        return jarFile != null && jarFile.isValid()
+        val jarFile = javaApplicationEnvironment.jarFileSystem.findFileByPath("$pathToJar!/")
+        return jarFile != null && jarFile.isValid
     }
 
     protected fun addToClasspath(path: File, rootType: JavaRoot.RootType? = null) {
-        if (path.isFile()) {
-            val jarFile = javaApplicationEnvironment.getJarFileSystem().findFileByPath("$path!/")
+        if (path.isFile) {
+            val jarFile = javaApplicationEnvironment.jarFileSystem.findFileByPath("$path!/")
             if (jarFile == null) {
                 KotlinLogger.logWarning("Can't find jar: $path")
                 return
@@ -219,7 +212,7 @@ abstract class KotlinCommonEnvironment(disposable: Disposable) {
             val type = rootType ?: JavaRoot.RootType.BINARY
             roots.add(JavaRoot(jarFile, type))
         } else {
-            val root = javaApplicationEnvironment.getLocalFileSystem().findFileByPath(path.getAbsolutePath())
+            val root = javaApplicationEnvironment.localFileSystem.findFileByPath(path.absolutePath)
             if (root == null) {
                 KotlinLogger.logWarning("Can't find jar: $path")
                 return

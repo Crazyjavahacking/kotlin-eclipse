@@ -1,27 +1,21 @@
 package org.jetbrains.kotlin.ui
 
-import org.eclipse.core.resources.IResourceChangeListener
-import org.eclipse.core.resources.IResourceChangeEvent
-import org.eclipse.core.resources.IResourceDeltaVisitor
-import org.eclipse.core.resources.IResourceDelta
-import org.eclipse.core.resources.IFile
-import org.jetbrains.kotlin.core.model.getEnvironment
-import org.jetbrains.kotlin.core.model.KotlinScriptEnvironment
-import org.eclipse.ui.PlatformUI
-import org.jetbrains.kotlin.ui.editors.KotlinScriptEditor
-import org.eclipse.ui.IEditorPart
-import org.jetbrains.kotlin.core.model.runJob
+import org.eclipse.core.resources.*
+import org.eclipse.core.runtime.IStatus
 import org.eclipse.core.runtime.Status
 import org.eclipse.core.runtime.jobs.Job
-import org.jetbrains.kotlin.core.model.KotlinAnalysisFileCache
-import org.eclipse.core.runtime.IStatus
-import org.jetbrains.kotlin.core.log.KotlinLogger
-import org.jetbrains.kotlin.script.ScriptDependenciesProvider
+import org.eclipse.ui.PlatformUI
 import org.jetbrains.kotlin.core.builder.KotlinPsiManager
+import org.jetbrains.kotlin.core.model.KotlinAnalysisFileCache
+import org.jetbrains.kotlin.core.model.KotlinScriptEnvironment
+import org.jetbrains.kotlin.core.model.getEnvironment
+import org.jetbrains.kotlin.core.model.runJob
+import org.jetbrains.kotlin.script.ScriptDependenciesProvider
+import org.jetbrains.kotlin.ui.editors.KotlinScriptEditor
 import kotlin.script.experimental.dependencies.ScriptDependencies
 
 class ScriptClasspathUpdater : IResourceChangeListener {
-    override public fun resourceChanged(event: IResourceChangeEvent) {
+    override fun resourceChanged(event: IResourceChangeEvent) {
         val delta = event.delta ?: return
         delta.accept(object : IResourceDeltaVisitor {
             override fun visit(delta: IResourceDelta?): Boolean {
@@ -37,7 +31,7 @@ class ScriptClasspathUpdater : IResourceChangeListener {
     }
 }
 
-private fun tryUpdateScriptClasspath(file: IFile) {
+internal fun tryUpdateScriptClasspath(file: IFile) {
     if (findEditor(file) == null) return
     
     val environment = getEnvironment(file) as? KotlinScriptEnvironment ?: return

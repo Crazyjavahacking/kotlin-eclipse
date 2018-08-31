@@ -36,7 +36,6 @@ import org.eclipse.jdt.core.JavaCore
 import org.eclipse.jdt.internal.core.JavaProject
 import org.eclipse.osgi.internal.loader.EquinoxClassLoader
 import org.jetbrains.kotlin.asJava.classes.KtLightClassForFacade
-import org.jetbrains.kotlin.cli.common.script.CliScriptDefinitionProvider
 import org.jetbrains.kotlin.cli.jvm.compiler.CliVirtualFileFinderFactory
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCliJavaFileManagerImpl
 import org.jetbrains.kotlin.cli.jvm.index.JvmDependenciesIndexImpl
@@ -67,13 +66,11 @@ import org.jetbrains.kotlin.extensions.StorageComponentContainerContributor
 import org.jetbrains.kotlin.load.java.sam.SamWithReceiverResolver
 import org.jetbrains.kotlin.load.kotlin.MetadataFinderFactory
 import org.jetbrains.kotlin.load.kotlin.VirtualFileFinderFactory
-import org.jetbrains.kotlin.parsing.KotlinParserDefinition
 import org.jetbrains.kotlin.psi.KtModifierListOwner
 import org.jetbrains.kotlin.resolve.TargetPlatform
 import org.jetbrains.kotlin.resolve.jvm.platform.JvmPlatform
 import org.jetbrains.kotlin.script.KotlinScriptDefinition
 import org.jetbrains.kotlin.script.ScriptDefinitionProvider
-import org.jetbrains.kotlin.script.StandardScriptDefinition
 import java.io.File
 import java.net.URL
 import java.net.URLClassLoader
@@ -176,9 +173,7 @@ class KotlinScriptEnvironment private constructor(
         @JvmStatic
         fun getEclipseFile(project: Project): IFile? = cachedEnvironment.getEclipseResource(project)
 
-        fun isScript(file: IFile): Boolean {
-            return file.fileExtension == KotlinParserDefinition.STD_SCRIPT_SUFFIX // TODO: use ScriptDefinitionProvider
-        }
+        fun isScript(file: IFile): Boolean = EclipseScriptDefinitionProvider().isScript(file.name)
 
         private fun checkIsScript(file: IFile) {
             if (!isScript(file)) {
@@ -309,9 +304,6 @@ class KotlinEnvironment private constructor(val eclipseProject: IProject, dispos
         with(project) {
             registerService(KtLightClassForFacade.FacadeStubCache::class.java, KtLightClassForFacade.FacadeStubCache(project))
         }
-
-        (ScriptDefinitionProvider.getInstance(project) as? CliScriptDefinitionProvider)
-                ?.setScriptDefinitions(listOf(StandardScriptDefinition))
 
         registerCompilerPlugins()
 
